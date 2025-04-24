@@ -21,78 +21,80 @@ class CloudResourceManager:
         # Visualization setup
         self.utilization_history = deque(maxlen=30)
         self.fig, self.ax = plt.subplots()
-        self.should_plot = True  # Control flag for plotting thread
+        self.should_plot = True
         
         # Logging setup
-        logging.basicConfig(level=logging.INFO, 
-                          format='%(asctime)s - %(levelname)s - %(message)s')
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(threadName)s - %(message)s'
+        )
         self.logger = logging.getLogger(__name__)
-
-    def plot_utilization(self):
-        """Thread function for live plotting"""
-        while self.should_plot:
-            with self.lock:  # Thread-safe access to history
-                history = list(self.utilization_history)
-            
-            self.ax.clear()
-            self.ax.plot(history, 'b-')
-            self.ax.set_title('Resource Utilization (Last 30 sec)')
-            self.ax.set_ylim(0, 100)
-            self.ax.set_xlabel('Time Steps')
-            self.ax.set_ylabel('Utilization %')
-            plt.pause(1)  # Update plot every second
 
     def request_resource(self, container_id, resources_needed):
         start_time = time.time()
-        
         with self.lock:
             self.total_requests += 1
-            
             if self.available_resources >= resources_needed:
                 self.available_resources -= resources_needed
                 self.successful_requests += 1
-                
-                # Update utilization history
-                utilization = (1 - self.available_resources/self.total_resources) * 100
-                self.utilization_history.append(utilization)
-                
                 wait_time = time.time() - start_time
                 self.wait_times.append(wait_time)
-                
-                self.logger.info(f"Container {container_id} allocated {resources_needed} resources. "
-                               f"Remaining: {self.available_resources}")
+                self.logger.info(f"Allocated {resources_needed} units | Remaining: {self.available_resources}")
                 return True
             else:
-                self.logger.warning(f"Container {container_id} denied {resources_needed} resources. "
-                                  f"Available: {self.available_resources}")
+                self.logger.warning(f"Denied {resources_needed} units | Available: {self.available_resources}")
                 return False
 
-    # ... (keep your existing release_resource and simulate_container_workload methods) ...
+    def release_resource(self, container_id, resources_released):
+        with self.lock:
+            self.available_resources += resources_released
+            self.logger.info(f"Released {resources_released} units | Now available: {self.available_resources}")
+
+    # ===== MISSING METHOD - ADD THIS =====
+    def simulate_container_workload(self, container_id):
+        """Thread function simulating container behavior"""
+        while True:
+            resources_needed = random.randint(5, 20)
+            if self.request_resource(container_id, resources_needed):
+                time.sleep(random.uniform(0.1, 0.5))
+                self.release_resource(container_id, resources_needed)
+            time.sleep(random.uniform(0.2, 1))
+
+    def plot_utilization(self):
+        """Live resource utilization plotting"""
+        plt.ion()  # Interactive mode
+        while self.should_plot:
+            with self.lock:
+                utilization = (1 - self.available_resources/self.total_resources) * 100
+                self.utilization_history.append(utilization)
+                self.ax.clear()
+                self.ax.plot(list(self.utilization_history), 'b-')
+                self.ax.set_title('Resource Utilization (Last 30 steps)')
+                self.ax.set_ylim(0, 100)
+                plt.pause(1)
+
+    def performance_report(self):
+        avg_wait_time = sum(self.wait_times)/len(self.wait_times) if self.wait_times else 0
+        success_rate = (self.successful_requests/self.total_requests)*100 if self.total_requests else 0
+        print(f"\n=== Report ===\nSuccess Rate: {success_rate:.1f}%\nAvg Wait: {avg_wait_time:.4f}s")
 
 def main():
     manager = CloudResourceManager()
     
-    # Start plotting thread
-    plot_thread = threading.Thread(target=manager.plot_utilization, daemon=True)
-    plot_thread.start()
+    # Start visualization thread
+    threading.Thread(target=manager.plot_utilization, daemon=True).start()
     
-    # Create worker threads
-    workers = []
+    # Launch container threads
     for i in range(5):
-        t = threading.Thread(
+        threading.Thread(
             target=manager.simulate_container_workload,
             args=(f"Container-{i}",),
             daemon=True
-        )
-        workers.append(t)
-        t.start()
+        ).start()
     
-    # Run for 30 seconds
+    # Run simulation
     time.sleep(30)
-    
-    # Cleanup
-    manager.should_plot = False  # Stop plotting thread
-    plot_thread.join(timeout=1)
+    manager.should_plot = False
     manager.performance_report()
 
 if __name__ == "__main__":
