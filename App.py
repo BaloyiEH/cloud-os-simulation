@@ -3,6 +3,9 @@ import time
 import random
 from queue import Queue
 import logging
+import matplotlib.pyplot as plt
+import time
+from collections import deque
 
 class CloudResourceManager:
     def __init__(self, total_resources=100):
@@ -100,3 +103,20 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+# Add to your CloudResourceManager __init__:
+self.utilization_history = deque(maxlen=30)
+self.fig, self.ax = plt.subplots()
+
+def plot_utilization(self):
+    while True:
+        self.ax.clear()
+        self.ax.plot(list(self.utilization_history))
+        self.ax.set_title('Resource Utilization (Last 30 sec)')
+        plt.pause(1)
+
+# Call this in main():
+plot_thread = threading.Thread(target=manager.plot_utilization, daemon=True)
+plot_thread.start()
