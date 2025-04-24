@@ -4,7 +4,6 @@ import random
 from queue import Queue
 import logging
 import matplotlib.pyplot as plt
-import time
 from collections import deque
 
 class CloudResourceManager:
@@ -19,104 +18,82 @@ class CloudResourceManager:
         self.successful_requests = 0
         self.wait_times = []
         
+        # Visualization setup
+        self.utilization_history = deque(maxlen=30)
+        self.fig, self.ax = plt.subplots()
+        self.should_plot = True  # Control flag for plotting thread
+        
         # Logging setup
         logging.basicConfig(level=logging.INFO, 
-                            format='%(asctime)s - %(levelname)s - %(message)s')
+                          format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
+
+    def plot_utilization(self):
+        """Thread function for live plotting"""
+        while self.should_plot:
+            with self.lock:  # Thread-safe access to history
+                history = list(self.utilization_history)
+            
+            self.ax.clear()
+            self.ax.plot(history, 'b-')
+            self.ax.set_title('Resource Utilization (Last 30 sec)')
+            self.ax.set_ylim(0, 100)
+            self.ax.set_xlabel('Time Steps')
+            self.ax.set_ylabel('Utilization %')
+            plt.pause(1)  # Update plot every second
 
     def request_resource(self, container_id, resources_needed):
         start_time = time.time()
         
-        # Use a lock to ensure thread-safe resource allocation
         with self.lock:
             self.total_requests += 1
             
-            # Check if resources are available
             if self.available_resources >= resources_needed:
                 self.available_resources -= resources_needed
                 self.successful_requests += 1
+                
+                # Update utilization history
+                utilization = (1 - self.available_resources/self.total_resources) * 100
+                self.utilization_history.append(utilization)
                 
                 wait_time = time.time() - start_time
                 self.wait_times.append(wait_time)
                 
                 self.logger.info(f"Container {container_id} allocated {resources_needed} resources. "
-                                 f"Remaining: {self.available_resources}")
-                
+                               f"Remaining: {self.available_resources}")
                 return True
             else:
-                self.logger.warning(f"Container {container_id} could not allocate {resources_needed} resources. "
-                                    f"Insufficient resources available.")
+                self.logger.warning(f"Container {container_id} denied {resources_needed} resources. "
+                                  f"Available: {self.available_resources}")
                 return False
 
-    def release_resource(self, container_id, resources_released):
-        with self.lock:
-            self.available_resources += resources_released
-            self.logger.info(f"Container {container_id} released {resources_released} resources. "
-                             f"Now available: {self.available_resources}")
-
-    def simulate_container_workload(self, container_id):
-        while True:
-            # Simulate variable resource needs
-            resources_needed = random.randint(5, 20)
-            
-            # Attempt to acquire resources
-            if self.request_resource(container_id, resources_needed):
-                # Simulate processing time
-                time.sleep(random.uniform(0.1, 0.5))
-                
-                # Release resources
-                self.release_resource(container_id, resources_needed)
-            
-            # Wait before next request
-            time.sleep(random.uniform(0.2, 1))
-
-    def performance_report(self):
-        avg_wait_time = sum(self.wait_times) / len(self.wait_times) if self.wait_times else 0
-        success_rate = (self.successful_requests / self.total_requests) * 100 if self.total_requests > 0 else 0
-        
-        print("\n--- Performance Report ---")
-        print(f"Total Requests: {self.total_requests}")
-        print(f"Successful Requests: {self.successful_requests}")
-        print(f"Success Rate: {success_rate:.2f}%")
-        print(f"Average Wait Time: {avg_wait_time:.4f} seconds")
+    # ... (keep your existing release_resource and simulate_container_workload methods) ...
 
 def main():
-    # Create resource manager
-    resource_manager = CloudResourceManager()
+    manager = CloudResourceManager()
     
-    # Create multiple container threads
-    containers = []
+    # Start plotting thread
+    plot_thread = threading.Thread(target=manager.plot_utilization, daemon=True)
+    plot_thread.start()
+    
+    # Create worker threads
+    workers = []
     for i in range(5):
-        container = threading.Thread(
-            target=resource_manager.simulate_container_workload, 
-            args=(f"Container-{i}",), 
+        t = threading.Thread(
+            target=manager.simulate_container_workload,
+            args=(f"Container-{i}",),
             daemon=True
         )
-        containers.append(container)
-        container.start()
+        workers.append(t)
+        t.start()
     
-    # Run simulation for a set duration
+    # Run for 30 seconds
     time.sleep(30)
     
-    # Generate performance report
-    resource_manager.performance_report()
+    # Cleanup
+    manager.should_plot = False  # Stop plotting thread
+    plot_thread.join(timeout=1)
+    manager.performance_report()
 
 if __name__ == "__main__":
     main()
-
-
-
-# Add to your CloudResourceManager __init__:
-self.utilization_history = deque(maxlen=30)
-self.fig, self.ax = plt.subplots()
-
-def plot_utilization(self):
-    while True:
-        self.ax.clear()
-        self.ax.plot(list(self.utilization_history))
-        self.ax.set_title('Resource Utilization (Last 30 sec)')
-        plt.pause(1)
-
-# Call this in main():
-plot_thread = threading.Thread(target=manager.plot_utilization, daemon=True)
-plot_thread.start()
