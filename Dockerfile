@@ -2,4 +2,6 @@ FROM python:3.9-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY *.py .                # Copies all Python files
+
+# Explicitly list files (adjust names to match your actual files)
+COPY APP.py concurrent_demo.py .
