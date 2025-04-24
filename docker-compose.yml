@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  original_sim:  # Runs your original simulation_03.py
+    build: .
+    command: python simulation_03.py
+    environment:
+      - CONTAINER_ID=1
+  enhanced_sim:  # Runs the new concurrent_demo.py
+    build: .
+    command: python concurrent_demo.py
+    environment:
+      - CONTAINER_ID=2
